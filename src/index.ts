@@ -6,8 +6,10 @@ const PORT = 8080
 
 const server = http.createServer()
 server.listen(PORT)
-const io = socketIO(server);
+const io = socketIO(server)
 
-const cm = new ControllerManager(io)
+const controllerManager = new ControllerManager(io)
+
+controllerManager.start()
 
 export default ControllerManager
