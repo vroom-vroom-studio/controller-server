@@ -20,14 +20,18 @@
   },
   "homepage": "https://github.com/vroom-vroom-studio/controller-server#readme",
   "devDependencies": {
+    "@types/ip": "^1.1.0",
+    "@types/mdns": "^0.0.33",
     "@types/node": "^13.7.7",
     "@types/socket.io": "^2.1.4",
+    "@types/uuid": "^7.0.0",
     "ts-node": "^8.6.2",
     "ts-node-dev": "^1.0.0-pre.44",
     "typescript": "^3.8.3"
   },
   "dependencies": {
-    "@types/uuid": "^7.0.0",
+    "ip": "^1.1.5",
+    "mdns": "^2.5.1",
     "socket.io": "^2.3.0",
     "uuid": "^7.0.2"
   }
