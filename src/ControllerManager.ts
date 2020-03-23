@@ -1,6 +1,6 @@
 import { Server, Socket, Namespace } from "socket.io";
 import mdns from "mdns";
-import ip from "ip";
+import IP from "ip";
 import { v4 as uuid } from "uuid";
 
 export interface IController {
@@ -56,11 +56,7 @@ export default class ControllerManager {
     this.controllerRoom = io.of(this.controllerRoomName);
     this.controllers = {};
     // global namespace
-    this.io.on("connection", this.globalOnConnection);
-    // screen namespace
-    this.screenRoom.on("connection", this.screenOnConnection);
-    // controller namespace
-    this.controllerRoom.on("connection", this.controllerOnConnection);
+    this.io.on("connection", this.onConnection);
     this.individualEvents = config?.individualEvents ?? false;
     // loop initialization
     this.loop = null;
@@ -70,21 +66,21 @@ export default class ControllerManager {
     this.updateFrequency = config?.updateFrequency ?? 60;
   }
   // onConnects
-  private globalOnConnection = (socket: Socket) => {
+  private onConnection = (socket: Socket) => {
     // screen binding
     socket.on("screen-connection", this.onScreenConnection(socket));
+    socket.on("screen-disconnect", this.onScreenDisconnection(socket));
+    socket.on("disconnect", this.onScreenDisconnection(socket));
     // controller binding
     socket.on("controller-connection", this.onControllerConnection(socket));
-  };
-  private screenOnConnection = (socket: Socket) => {
-    socket.on("disconnect", this.onScreenDisconnection(socket));
-  };
-  private controllerOnConnection = (socket: Socket) => {
     socket.on("controller-update", this.onControllerUpdate(socket));
+    socket.on("controller-disconnect", this.onControllerDisconnection(socket));
     socket.on("disconnect", this.onControllerDisconnection(socket));
   };
+
   // screen management
   private onScreenConnection = (socket: Socket) => () => {
+    console.log("A screen just connected");
     socket.join(this.screenRoomName);
     const id = uuid();
     this.screens.push({
@@ -96,9 +92,12 @@ export default class ControllerManager {
   private onScreenDisconnection = (socket: Socket) => () => {
     socket.leave(this.screenRoomName);
     this.screens = this.screens.filter(screen => screen.socketId !== socket.id);
+    socket.emit("disconnection-success");
+    console.log("A screen just disconnected");
   };
   // controller management
   private onControllerConnection = (socket: Socket) => () => {
+    console.log("A controller just connected");
     socket.join(this.controllerRoomName);
     const id = uuid();
     const socketId = socket.id;
@@ -107,28 +106,40 @@ export default class ControllerManager {
       socketId,
       data: null
     };
-    socket.emit("connection-success", { id });
+    socket.emit("connection-success", {
+      id,
+      room: this.controllerRoomName
+    });
   };
   private onControllerDisconnection = (socket: Socket) => () => {
     socket.leave(this.controllerRoomName);
     delete this.controllers[socket.id];
+    socket.emit("disconnection-success");
+    console.log("A controller just disconnected");
   };
   private onControllerUpdate = (socket: Socket) => (data: any) => {
     const socketId = socket.id;
-    this.controllers[socketId] = { ...this.controllers[socketId], data };
+    this.controllers[socketId] = {
+      ...this.controllers[socketId],
+      data
+    };
     this.shouldUpdate = true;
     if (this.individualEvents) {
       const { id, data } = this.controllers[socketId];
-      this.screenRoom.emit(`controller-update-${socketId}`, { id, data });
+      this.screenRoom.emit(`controller-update-${socketId}`, {
+        id,
+        data
+      });
     }
   };
   public start = () => {
-    console.log("started");
+    const ip = IP.address();
+    console.log(`started at ${ip}:${this.port}`);
     mdns.createAdvertisement(mdns.tcp("http"), this.port, {
       name: this.name,
       txtRecord: {
         type: "vroom-vroom-device",
-        ip: ip.address(),
+        ip,
         port: this.port
       }
     });
@@ -143,9 +154,12 @@ export default class ControllerManager {
     this.loop && clearInterval(this.loop);
   };
   public update = () => {
-    const controllerArray: Partial<
-      IController
-    >[] = Object.values(({ id, data }: IController) => ({ id, data }));
+    const controllerArray: Partial<IController>[] = Object.values(
+      ({ id, data }: IController) => ({
+        id,
+        data
+      })
+    );
     this.screenRoom.emit("controller-update", controllerArray);
     this.shouldUpdate = false;
     this.lastUpdate = Date.now();

@@ -2,13 +2,13 @@ import http from "http";
 import socketIO from "socket.io";
 import ControllerManager from "./ControllerManager";
 
-const PORT = 8080;
+const PORT = 8686;
 const server = http.createServer();
 server.listen(PORT);
 const io = socketIO(server);
 
 const controllerManager = new ControllerManager(io, {
-  name: "VroomVroomDevice",
+  name: "VroomVroomDevice2",
   port: PORT
 });
 
