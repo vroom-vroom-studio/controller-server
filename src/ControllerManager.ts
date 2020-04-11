@@ -21,6 +21,7 @@ export interface IControllerManagerConfig {
   updateFrequency?: number;
   autoStopTime?: number;
   port: number;
+  controllers?: any[];
 }
 
 export default class ControllerManager {
@@ -31,8 +32,8 @@ export default class ControllerManager {
   public controllerRoomName: string;
   private screenRoom: Namespace;
   private screens: IScreen[];
-  private controllerRoom: Namespace;
   private controllers: { [socketId: string]: IController };
+  private controllersDescription: any[];
   private individualEvents: boolean;
   private loop: NodeJS.Timeout | null;
   private shouldUpdate: boolean;
@@ -53,8 +54,8 @@ export default class ControllerManager {
       : "CONTROLLER_ROOM";
     this.screenRoom = io.of(this.screenRoomName);
     this.screens = [];
-    this.controllerRoom = io.of(this.controllerRoomName);
     this.controllers = {};
+    this.controllersDescription = config?.controllers ?? [];
     // global namespace
     this.io.on("connection", this.onConnection);
     this.individualEvents = config?.individualEvents ?? false;
@@ -73,6 +74,7 @@ export default class ControllerManager {
     socket.on("disconnect", this.onScreenDisconnection(socket));
     // controller binding
     socket.on("controller-connection", this.onControllerConnection(socket));
+    socket.on("controller-get", this.onControllerGet(socket));
     socket.on("controller-update", this.onControllerUpdate(socket));
     socket.on("controller-disconnect", this.onControllerDisconnection(socket));
     socket.on("disconnect", this.onControllerDisconnection(socket));
@@ -85,13 +87,15 @@ export default class ControllerManager {
     const id = uuid();
     this.screens.push({
       id,
-      socketId: socket.id
+      socketId: socket.id,
     });
     socket.emit("connection-success", { id });
   };
   private onScreenDisconnection = (socket: Socket) => () => {
     socket.leave(this.screenRoomName);
-    this.screens = this.screens.filter(screen => screen.socketId !== socket.id);
+    this.screens = this.screens.filter(
+      (screen) => screen.socketId !== socket.id
+    );
     socket.emit("disconnection-success");
     console.log("A screen just disconnected");
   };
@@ -104,11 +108,11 @@ export default class ControllerManager {
     this.controllers[socketId] = {
       id,
       socketId,
-      data: null
+      data: null,
     };
     socket.emit("connection-success", {
       id,
-      room: this.controllerRoomName
+      room: this.controllerRoomName,
     });
   };
   private onControllerDisconnection = (socket: Socket) => () => {
@@ -117,18 +121,23 @@ export default class ControllerManager {
     socket.emit("disconnection-success");
     console.log("A controller just disconnected");
   };
+  private onControllerGet = (socket: Socket) => () => {
+    socket.emit("get-success", this.controllersDescription);
+  };
   private onControllerUpdate = (socket: Socket) => (data: any) => {
+    console.log("update", data);
     const socketId = socket.id;
     this.controllers[socketId] = {
       ...this.controllers[socketId],
-      data
+      data: { ...this.controllers[socketId].data, ...data },
     };
+    console.log(this.controllers);
     this.shouldUpdate = true;
     if (this.individualEvents) {
       const { id, data } = this.controllers[socketId];
       this.screenRoom.emit(`controller-update-${socketId}`, {
         id,
-        data
+        data,
       });
     }
   };
@@ -140,8 +149,8 @@ export default class ControllerManager {
       txtRecord: {
         type: "vroom-vroom-device",
         ip,
-        port: this.port
-      }
+        port: this.port,
+      },
     });
   };
   // loop management
@@ -157,7 +166,7 @@ export default class ControllerManager {
     const controllerArray: Partial<IController>[] = Object.values(
       ({ id, data }: IController) => ({
         id,
-        data
+        data,
       })
     );
     this.screenRoom.emit("controller-update", controllerArray);
